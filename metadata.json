@@ -1,0 +1,6 @@
+{
+  "name": "KodiPay - Kenya Rental Payment & Property Management System",
+  "description": "Production-grade Kenyan rental payment and property management system featuring automated rent billing, M-Pesa/Bank/Cash payment recording, real-time arrears tracking, official KSh receipts, role-based access, and dedicated tenant portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
