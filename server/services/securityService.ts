@@ -384,8 +384,8 @@ export class SecurityService {
     );
 
     if (res.rows.length === 0) {
-      // Legacy session or created before session tracking
-      return { valid: true };
+      // Fail closed: JWTs without a persisted session must never be accepted.
+      return { valid: false, reason: 'Session record not found. Please sign in again.' };
     }
 
     const session = res.rows[0];
