@@ -4,6 +4,7 @@
  */
 
 import { Router, Response } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { query, transaction } from '../db/connection.ts';
@@ -264,8 +265,11 @@ authRouter.post('/claim-super-admin', requireAuth, async (req: AuthRequest, res)
 
     // Verify authenticated identity: matching email OR matching secret claim key OR no other custom super admin
     const isMatchingEmail = Boolean(designatedEmail) && clientEmail === designatedEmail;
-    const isValidKey = Boolean(expectedKey) && providedKey.length === expectedKey.length &&
-      (await import('node:crypto')).timingSafeEqual(Buffer.from(providedKey), Buffer.from(expectedKey));
+    const providedKeyBytes = Buffer.from(providedKey);
+    const expectedKeyBytes = Buffer.from(expectedKey);
+    const isValidKey = expectedKeyBytes.length > 0 &&
+      providedKeyBytes.length === expectedKeyBytes.length &&
+      timingSafeEqual(providedKeyBytes, expectedKeyBytes);
 
     if (!isMatchingEmail && !isValidKey) {
       return res.status(403).json({
