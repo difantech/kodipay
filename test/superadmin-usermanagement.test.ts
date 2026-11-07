@@ -70,7 +70,7 @@ async function runSuperAdminTests() {
   assert(userAdminLoginRes.ok, 'Designated Super Admin logs in / initializes with existing credentials');
   const userAdminData = await userAdminLoginRes.json();
   assert(userAdminData.user.role === 'super_admin', 'Designated account is permanently assigned super_admin');
-  assert(userAdminData.user.email === '${TEST_DESIGNATED_ADMIN_EMAIL}', 'Preserves exact user email');
+  assert(userAdminData.user.email === TEST_DESIGNATED_ADMIN_EMAIL, 'Preserves exact user email');
   const userAdminToken = userAdminData.token;
   console.log(`✓ User account ${TEST_DESIGNATED_ADMIN_EMAIL} (ID: ${userAdminData.user.id}) permanently assigned Super Admin!`);
 
@@ -122,13 +122,13 @@ async function runSuperAdminTests() {
 
   // Test 7: List users with search and filter
   console.log('\nTest 7: Listing users with search and filter...');
-  const listRes = await fetch(`${BASE_URL}/api/users?search=joshking`, {
+  const listRes = await fetch(`${BASE_URL}/api/users?search=${encodeURIComponent(TEST_DESIGNATED_ADMIN_EMAIL)}`, {
     headers: { Authorization: `Bearer ${userAdminToken}` }
   });
   assert(listRes.ok, 'List users returns 200 OK');
   const filteredUsers = await listRes.json();
   assert(filteredUsers.length >= 1, 'Search found matching user');
-  assert(filteredUsers[0].email === '${TEST_DESIGNATED_ADMIN_EMAIL}', 'Returned correct matching user');
+  assert(filteredUsers[0].email === TEST_DESIGNATED_ADMIN_EMAIL, 'Returned correct matching user');
   console.log('✓ Search & filter verified on users API.');
 
   // Test 8: Super Admin creates a new user account
