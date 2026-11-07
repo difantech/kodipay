@@ -78,6 +78,11 @@ authRouter.post('/setup-first-admin', async (req, res) => {
       fullName: user.full_name
     });
 
+    await securityService.createUserSession(
+      user.id, token, req.ip,
+      req.headers['user-agent'] as string
+    );
+
     return res.status(201).json({
       message: 'Super Administrator setup completed successfully.',
       token,
@@ -151,21 +156,6 @@ authRouter.post('/login', async (req, res) => {
       [email]
     );
 
-    const designatedAdminEmail = (process.env.SUPER_ADMIN_EMAIL || 'joshkingtechnologies@gmail.com').trim().toLowerCase();
-    const isTargetAdmin = email.trim().toLowerCase() === designatedAdminEmail;
-
-    // Zero-friction initial registration for designated Super Admin if logging in for first time on a fresh database
-    if (userRes.rows.length === 0 && isTargetAdmin) {
-      const passwordHash = await bcrypt.hash(password, 10);
-      const insertAdmin = await query(
-        `INSERT INTO users (email, password_hash, full_name, phone_number, role, is_active, status, last_login_at)
-         VALUES ($1, $2, 'Chief Super Administrator', '+254700000000', 'super_admin', TRUE, 'active', NOW())
-         RETURNING id, email, password_hash, full_name, role, is_active, status, last_login_at`,
-        [email.trim().toLowerCase(), passwordHash]
-      );
-      userRes = insertAdmin;
-      console.log(`Initialized primary Super Administrator account for ${designatedAdminEmail}`);
-    }
 
     if (userRes.rows.length === 0) {
       await securityService.recordLoginAttempt(email, clientIp, false, 'User account not found');
@@ -193,12 +183,6 @@ authRouter.post('/login', async (req, res) => {
         actionTaken: 'flagged'
       });
       return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Auto-promote existing account to Super Admin if matching designated administrator email
-    if (isTargetAdmin && user.role !== 'super_admin') {
-      await query(`UPDATE users SET role = 'super_admin', updated_at = NOW() WHERE id = $1`, [user.id]);
-      user.role = 'super_admin';
     }
 
     // Update last_login_at timestamp
@@ -269,12 +253,12 @@ authRouter.post('/claim-super-admin', requireAuth, async (req: AuthRequest, res)
   try {
     const user = req.user!;
     const clientEmail = user.email.toLowerCase().trim();
-    const designatedEmail = (process.env.SUPER_ADMIN_EMAIL || 'joshkingtechnologies@gmail.com').toLowerCase().trim();
+    const designatedEmail = (process.env.SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
     const providedKey = req.headers['x-admin-claim-key'] || req.body?.claimKey;
     const expectedKey = process.env.ADMIN_CLAIM_KEY;
 
     // Verify authenticated identity: matching email OR matching secret claim key OR no other custom super admin
-    const isMatchingEmail = clientEmail === designatedEmail;
+    const isMatchingEmail = Boolean(designatedEmail) && clientEmail === designatedEmail;
     const isValidKey = expectedKey && providedKey === expectedKey;
 
     if (!isMatchingEmail && !isValidKey) {
@@ -298,6 +282,11 @@ authRouter.post('/claim-super-admin', requireAuth, async (req: AuthRequest, res)
       role: 'super_admin',
       fullName: user.fullName
     });
+
+    await securityService.createUserSession(
+      user.id, refreshedToken, req.ip,
+      req.headers['user-agent'] as string
+    );
 
     await logAudit({
       userId: user.id,
@@ -362,13 +351,6 @@ authRouter.get('/me', requireAuth, async (req: AuthRequest, res) => {
     }
 
     const dbUser = userRes.rows[0];
-
-    // Ensure designated email is permanently verified as Super Admin
-    const designatedAdminEmail = (process.env.SUPER_ADMIN_EMAIL || 'joshkingtechnologies@gmail.com').trim().toLowerCase();
-    if (dbUser.email.toLowerCase() === designatedAdminEmail && dbUser.role !== 'super_admin') {
-      await query(`UPDATE users SET role = 'super_admin', is_active = TRUE, status = 'active', updated_at = NOW() WHERE id = $1`, [dbUser.id]);
-      dbUser.role = 'super_admin';
-    }
 
     let tenantInfo = null;
 
@@ -593,6 +575,11 @@ authRouter.post('/invitation/:token/activate', async (req, res) => {
       role: 'tenant',
       fullName: invite.full_name
     });
+
+    await securityService.createUserSession(
+      result.userId, tokenJwt, req.ip,
+      req.headers['user-agent'] as string
+    );
 
     await logAudit({
       userId: result.userId,
