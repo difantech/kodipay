@@ -37,30 +37,37 @@ const setupFirstAdminSchema = z.object({
 
 authRouter.post('/setup-first-admin', async (req, res) => {
   try {
-    const checkUsers = await query('SELECT COUNT(*) as count FROM users');
-    const count = parseInt(checkUsers.rows[0].count, 10);
-    if (count > 0) {
-      return res.status(403).json({ 
-        error: 'Initial setup is already completed. Super Administrator exists.' 
-      });
-    }
-
     const parse = setupFirstAdminSchema.safeParse(req.body);
     if (!parse.success) {
       return res.status(400).json({ error: 'Validation failed', details: parse.error.issues });
     }
 
     const { fullName, email, password, phoneNumber, nationalId } = parse.data;
-    const passwordHash = await bcrypt.hash(password, 10);
+    const normalizedEmail = email.trim().toLowerCase();
+    const passwordHash = await bcrypt.hash(password, 12);
 
-    const insertRes = await query(
-      `INSERT INTO users (full_name, email, password_hash, phone_number, national_id, role)
-       VALUES ($1, $2, $3, $4, $5, 'super_admin')
-       RETURNING id, full_name, email, role, created_at`,
-      [fullName, email.toLowerCase(), passwordHash, phoneNumber, nationalId || '']
-    );
+    // Serialize first-admin initialization so concurrent requests cannot both win.
+    const user = await transaction(async (txDb) => {
+      await txDb.query('LOCK TABLE users IN ACCESS EXCLUSIVE MODE');
+      const existing = await txDb.query('SELECT id FROM users LIMIT 1');
+      if (existing.rows.length > 0) {
+        return null;
+      }
 
-    const user = insertRes.rows[0];
+      const insertRes = await txDb.query(
+        `INSERT INTO users (full_name, email, password_hash, phone_number, national_id, role)
+         VALUES ($1, $2, $3, $4, $5, 'super_admin')
+         RETURNING id, full_name, email, role, created_at`,
+        [fullName.trim(), normalizedEmail, passwordHash, phoneNumber.trim(), nationalId || '']
+      );
+      return insertRes.rows[0];
+    });
+
+    if (!user) {
+      return res.status(403).json({
+        error: 'Initial setup is already completed. Super Administrator exists.'
+      });
+    }
 
     await logAudit({
       userId: user.id,
@@ -114,12 +121,9 @@ authRouter.post('/login', async (req, res) => {
     }
 
     const { email, password } = parse.data;
-    const clientIp = (
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress ||
-      req.ip ||
-      '127.0.0.1'
-    ).replace('::ffff:', '');
+    // Do not trust a caller-supplied X-Forwarded-For value unless proxy trust is
+    // explicitly configured at the application boundary.
+    const clientIp = (req.socket.remoteAddress || req.ip || '127.0.0.1').replace('::ffff:', '');
 
     // 1. Check Login Lockout (Brute-Force Protection)
     const settings = await securityService.getSecuritySettings();
@@ -254,12 +258,14 @@ authRouter.post('/claim-super-admin', requireAuth, async (req: AuthRequest, res)
     const user = req.user!;
     const clientEmail = user.email.toLowerCase().trim();
     const designatedEmail = (process.env.SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
-    const providedKey = req.headers['x-admin-claim-key'] || req.body?.claimKey;
-    const expectedKey = process.env.ADMIN_CLAIM_KEY;
+    const rawProvidedKey = req.headers['x-admin-claim-key'] || req.body?.claimKey;
+    const providedKey = typeof rawProvidedKey === 'string' ? rawProvidedKey : '';
+    const expectedKey = process.env.ADMIN_CLAIM_KEY || '';
 
     // Verify authenticated identity: matching email OR matching secret claim key OR no other custom super admin
     const isMatchingEmail = Boolean(designatedEmail) && clientEmail === designatedEmail;
-    const isValidKey = expectedKey && providedKey === expectedKey;
+    const isValidKey = Boolean(expectedKey) && providedKey.length === expectedKey.length &&
+      (await import('node:crypto')).timingSafeEqual(Buffer.from(providedKey), Buffer.from(expectedKey));
 
     if (!isMatchingEmail && !isValidKey) {
       return res.status(403).json({
@@ -267,13 +273,27 @@ authRouter.post('/claim-super-admin', requireAuth, async (req: AuthRequest, res)
       });
     }
 
-    // Permanently assign Super Admin role to this exact existing user ID
-    await query(
-      `UPDATE users
-       SET role = 'super_admin', is_active = TRUE, status = 'active', updated_at = NOW()
-       WHERE id = $1`,
-      [user.id]
-    );
+    // Allow promotion only while no Super Admin exists; serialize concurrent claims.
+    const claimed = await transaction(async (txDb) => {
+      await txDb.query('LOCK TABLE users IN ACCESS EXCLUSIVE MODE');
+      const admins = await txDb.query(
+        `SELECT id FROM users WHERE role = 'super_admin' AND id <> $1 LIMIT 1`,
+        [user.id]
+      );
+      if (admins.rows.length > 0) return false;
+
+      const update = await txDb.query(
+        `UPDATE users
+         SET role = 'super_admin', is_active = TRUE, status = 'active', updated_at = NOW()
+         WHERE id = $1 AND role <> 'super_admin'
+         RETURNING id`,
+        [user.id]
+      );
+      return update.rows.length === 1 || user.role === 'super_admin';
+    });
+    if (!claimed) {
+      return res.status(403).json({ error: 'A Super Administrator has already been initialized.' });
+    }
 
     // Re-issue JWT session token with Super Admin role
     const refreshedToken = signToken({
