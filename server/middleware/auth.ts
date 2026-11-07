@@ -7,9 +7,14 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from '../db/connection.ts';
 
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
-  ? (() => { throw new Error('JWT_SECRET must be configured in production environment variables.'); })()
-  : 'kodipay-local-development-only-secret');
+const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+const configuredJwtSecret = process.env.JWT_SECRET;
+if (isProduction && (!configuredJwtSecret || configuredJwtSecret.length < 32)) {
+  throw new Error('JWT_SECRET must be configured with at least 32 characters in production.');
+}
+const JWT_SECRET = configuredJwtSecret || 'kodipay-local-development-only-secret';
+const JWT_ISSUER = 'kodipay-api';
+const JWT_AUDIENCE = 'kodipay-client';
 
 export interface AuthenticatedUser {
   id: string;
@@ -33,7 +38,7 @@ export function signToken(user: AuthenticatedUser): string {
       tenantId: user.tenantId || null
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '7d', algorithm: 'HS256', issuer: JWT_ISSUER, audience: JWT_AUDIENCE }
   );
 }
 
@@ -54,7 +59,14 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ['HS256'],
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE
+    }) as any;
+    if (!decoded || typeof decoded.id !== 'string' || !decoded.id) {
+      return res.status(401).json({ error: 'Invalid authentication token.' });
+    }
 
     // Validate active session against user_sessions table and check inactivity timeout
     const sessionCheck = await securityService.validateSession(token);

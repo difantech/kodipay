@@ -10,6 +10,17 @@ function assert(condition: any, message: string) {
 }
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const TEST_ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
+const TEST_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+const TEST_DESIGNATED_ADMIN_EMAIL = process.env.TEST_DESIGNATED_ADMIN_EMAIL;
+const TEST_DESIGNATED_ADMIN_PASSWORD = process.env.TEST_DESIGNATED_ADMIN_PASSWORD;
+const TEST_CARETAKER_EMAIL = process.env.TEST_CARETAKER_EMAIL;
+const TEST_CARETAKER_PASSWORD = process.env.TEST_CARETAKER_PASSWORD;
+
+if (!TEST_ADMIN_EMAIL || !TEST_ADMIN_PASSWORD || !TEST_DESIGNATED_ADMIN_EMAIL || !TEST_DESIGNATED_ADMIN_PASSWORD || !TEST_CARETAKER_EMAIL || !TEST_CARETAKER_PASSWORD) {
+  throw new Error('Set TEST_ADMIN_*, TEST_DESIGNATED_ADMIN_* and TEST_CARETAKER_* environment variables before running Super Admin tests.');
+}
+const TEMP_TEST_PASSWORD = `${Date.now()}-${Math.random().toString(36).slice(2)}-Aa9!`;
 
 async function runSuperAdminTests() {
   console.log('====================================================');
@@ -22,8 +33,8 @@ async function runSuperAdminTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'superadmin@kodipay.co.ke',
-      password: 'SuperAdmin2026!'
+      email: TEST_ADMIN_EMAIL,
+      password: TEST_ADMIN_PASSWORD
     })
   });
   assert(loginRes.ok, `Original account login succeeds (status ${loginRes.status})`);
@@ -46,22 +57,22 @@ async function runSuperAdminTests() {
   assert(!!meData.user.lastLoginAt, 'lastLoginAt timestamp is tracked in database');
   console.log(`✓ Server-side profile verified: lastLoginAt=${meData.user.lastLoginAt}`);
 
-  // Test 3: Authenticate / Initialize designated Super Admin account (joshkingtechnologies@gmail.com)
-  console.log('\nTest 3: Testing designated Super Admin account (joshkingtechnologies@gmail.com)...');
+  // Test 3: Authenticate / Initialize designated Super Admin account (${TEST_DESIGNATED_ADMIN_EMAIL})
+  console.log('\nTest 3: Testing designated Super Admin account (${TEST_DESIGNATED_ADMIN_EMAIL})...');
   const userAdminLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'joshkingtechnologies@gmail.com',
-      password: 'MyExistingSecretPassword2026!'
+      email: TEST_DESIGNATED_ADMIN_EMAIL,
+      password: TEST_DESIGNATED_ADMIN_PASSWORD
     })
   });
   assert(userAdminLoginRes.ok, 'Designated Super Admin logs in / initializes with existing credentials');
   const userAdminData = await userAdminLoginRes.json();
   assert(userAdminData.user.role === 'super_admin', 'Designated account is permanently assigned super_admin');
-  assert(userAdminData.user.email === 'joshkingtechnologies@gmail.com', 'Preserves exact user email');
+  assert(userAdminData.user.email === TEST_DESIGNATED_ADMIN_EMAIL, 'Preserves exact user email');
   const userAdminToken = userAdminData.token;
-  console.log(`✓ User account joshkingtechnologies@gmail.com (ID: ${userAdminData.user.id}) permanently assigned Super Admin!`);
+  console.log(`✓ User account ${TEST_DESIGNATED_ADMIN_EMAIL} (ID: ${userAdminData.user.id}) permanently assigned Super Admin!`);
 
   // Test 4: Verify claim-super-admin endpoint
   console.log('\nTest 4: Verifying secure server-side claim-super-admin endpoint...');
@@ -82,7 +93,7 @@ async function runSuperAdminTests() {
   const caretakerLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'caretaker@kodipay.co.ke', password: 'Caretaker2026!' })
+    body: JSON.stringify({ email: TEST_CARETAKER_EMAIL, password: TEST_CARETAKER_PASSWORD })
   });
   assert(caretakerLoginRes.ok, 'Caretaker logs in');
   const caretakerToken = (await caretakerLoginRes.json()).token;
@@ -111,13 +122,13 @@ async function runSuperAdminTests() {
 
   // Test 7: List users with search and filter
   console.log('\nTest 7: Listing users with search and filter...');
-  const listRes = await fetch(`${BASE_URL}/api/users?search=joshking`, {
+  const listRes = await fetch(`${BASE_URL}/api/users?search=${encodeURIComponent(TEST_DESIGNATED_ADMIN_EMAIL)}`, {
     headers: { Authorization: `Bearer ${userAdminToken}` }
   });
   assert(listRes.ok, 'List users returns 200 OK');
   const filteredUsers = await listRes.json();
   assert(filteredUsers.length >= 1, 'Search found matching user');
-  assert(filteredUsers[0].email === 'joshkingtechnologies@gmail.com', 'Returned correct matching user');
+  assert(filteredUsers[0].email === TEST_DESIGNATED_ADMIN_EMAIL, 'Returned correct matching user');
   console.log('✓ Search & filter verified on users API.');
 
   // Test 8: Super Admin creates a new user account
@@ -132,7 +143,7 @@ async function runSuperAdminTests() {
     body: JSON.stringify({
       fullName: 'Brenda Cherono',
       email: newEmail,
-      password: 'BrendaPassword2026!',
+      password: TEMP_TEST_PASSWORD,
       phoneNumber: '+254733445566',
       nationalId: '55667788',
       role: 'caretaker'
@@ -156,7 +167,7 @@ async function runSuperAdminTests() {
     body: JSON.stringify({
       fullName: 'Duplicate User',
       email: newEmail,
-      password: 'SomePassword2026!',
+      password: TEMP_TEST_PASSWORD,
       phoneNumber: '+254799887766',
       role: 'caretaker'
     })
@@ -223,7 +234,7 @@ async function runSuperAdminTests() {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${userAdminToken}`
     },
-    body: JSON.stringify({ newPassword: 'BrandNewPassword2026!' })
+    body: JSON.stringify({ newPassword: TEMP_TEST_PASSWORD })
   });
   assert(resetRes.ok, 'Password reset succeeds');
   console.log('✓ Password reset by Super Admin verified with session revocation.');
@@ -275,7 +286,7 @@ async function runSuperAdminTests() {
     body: JSON.stringify({
       fullName: 'Illegal User',
       email: 'illegal@test.com',
-      password: 'Password123!',
+      password: TEMP_TEST_PASSWORD,
       phoneNumber: '+254711000000',
       role: 'super_admin'
     })

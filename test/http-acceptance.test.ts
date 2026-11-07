@@ -10,6 +10,15 @@ function assert(condition: any, message: string) {
 }
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const TEST_ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
+const TEST_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+const TEST_CARETAKER_EMAIL = process.env.TEST_CARETAKER_EMAIL;
+const TEST_CARETAKER_PASSWORD = process.env.TEST_CARETAKER_PASSWORD;
+const TEST_TENANT_PORTAL_PASSWORD = process.env.TEST_TENANT_PORTAL_PASSWORD;
+
+if (!TEST_ADMIN_EMAIL || !TEST_ADMIN_PASSWORD || !TEST_CARETAKER_EMAIL || !TEST_CARETAKER_PASSWORD || !TEST_TENANT_PORTAL_PASSWORD) {
+  throw new Error('Set TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, TEST_CARETAKER_EMAIL, TEST_CARETAKER_PASSWORD and TEST_TENANT_PORTAL_PASSWORD before running HTTP acceptance tests.');
+}
 
 async function runHttpAcceptanceTests() {
   console.log('====================================================');
@@ -30,7 +39,7 @@ async function runHttpAcceptanceTests() {
   const adminLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'superadmin@kodipay.co.ke', password: 'SuperAdmin2026!' })
+    body: JSON.stringify({ email: TEST_ADMIN_EMAIL, password: TEST_ADMIN_PASSWORD })
   });
   assert(adminLoginRes.ok, 'Super admin login succeeds');
   const adminLogin = await adminLoginRes.json();
@@ -46,7 +55,7 @@ async function runHttpAcceptanceTests() {
   });
   assert(meRes.ok, '/api/auth/me returned 200');
   const me = await meRes.json();
-  assert(me.user.email === 'superadmin@kodipay.co.ke', 'Correct user profile returned');
+  assert(me.user.email === TEST_ADMIN_EMAIL, 'Correct user profile returned');
   console.log('✓ Token authorization and user identity verified.');
 
   // 4. Create Property and Rental Unit
@@ -210,7 +219,7 @@ async function runHttpAcceptanceTests() {
       monthlyRentKSh: 55000,
       depositKSh: 55000,
       createPortalLogin: true,
-      portalPassword: 'FaithPassword2026!'
+      portalPassword: TEST_TENANT_PORTAL_PASSWORD
     })
   });
   if (!tenantRes.ok) {
@@ -377,7 +386,7 @@ async function runHttpAcceptanceTests() {
   const tenantLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: tenantEmail, password: 'FaithPassword2026!' })
+    body: JSON.stringify({ email: tenantEmail, password: TEST_TENANT_PORTAL_PASSWORD })
   });
   assert(tenantLoginRes.ok, 'Tenant login succeeds');
   const tenantLogin = await tenantLoginRes.json();
@@ -403,7 +412,7 @@ async function runHttpAcceptanceTests() {
   const caretakerCheckLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'caretaker@kodipay.co.ke', password: 'Caretaker2026!' })
+    body: JSON.stringify({ email: TEST_CARETAKER_EMAIL, password: TEST_CARETAKER_PASSWORD })
   });
   if (caretakerCheckLoginRes.ok) {
     const caretakerCheckData = await caretakerCheckLoginRes.json();
@@ -590,7 +599,7 @@ async function runHttpAcceptanceTests() {
   const caretakerLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'caretaker@kodipay.co.ke', password: 'Caretaker2026!' })
+    body: JSON.stringify({ email: TEST_CARETAKER_EMAIL, password: TEST_CARETAKER_PASSWORD })
   });
   assert(caretakerLoginRes.ok, 'Caretaker login succeeds');
   const caretakerLogin = await caretakerLoginRes.json();
