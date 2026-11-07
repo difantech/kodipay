@@ -22,20 +22,6 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Quick switcher for demo testing roles (3 accounts only)
-  const handleQuickLogin = (role: 'super_admin' | 'caretaker' | 'tenant') => {
-    if (role === 'super_admin') {
-      setEmail('superadmin@kodipay.co.ke');
-      setPassword('SuperAdmin2026!');
-    } else if (role === 'caretaker') {
-      setEmail('caretaker@kodipay.co.ke');
-      setPassword('Caretaker2026!');
-    } else if (role === 'tenant') {
-      setEmail('tenant.demo@kodipay.co.ke');
-      setPassword('Tenant2026!');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -99,38 +85,6 @@ export const LoginPage: React.FC = () => {
                 First-Administrator Setup Required
               </span>
               No administrative accounts detected. Please configure the initial Super Administrator below. This cannot be overridden once registered.
-            </div>
-          ) : (
-            <div className="mb-5">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                Quick Test Credentials (3 Core Roles):
-              </span>
-              <div className="grid grid-cols-3 gap-1.5 text-xs font-medium">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('super_admin')}
-                  className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-center transition-colors truncate"
-                  title="Super Admin - Full administrative & financial control"
-                >
-                  Super Admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('caretaker')}
-                  className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-center transition-colors truncate"
-                  title="Caretaker - Strict data entry only (Record payments, tenants, units)"
-                >
-                  Caretaker
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('tenant')}
-                  className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-center transition-colors truncate"
-                  title="Tenant - View personal statements and receipts"
-                >
-                  Tenant Demo
-                </button>
-              </div>
             </div>
           )}
 
