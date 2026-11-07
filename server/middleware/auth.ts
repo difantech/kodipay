@@ -7,7 +7,9 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from '../db/connection.ts';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'kodipay-kenya-production-secure-key-2026';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
+  ? (() => { throw new Error('JWT_SECRET must be configured in production environment variables.'); })()
+  : 'kodipay-local-development-only-secret');
 
 export interface AuthenticatedUser {
   id: string;
