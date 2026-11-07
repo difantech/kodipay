@@ -78,7 +78,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Form Body */}
         <div className="p-8">
-          {needsSetup || isSetupMode ? (
+          {(needsSetup || isSetupMode) && (
             <div className="mb-5 p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-950 leading-relaxed">
               <span className="font-bold flex items-center gap-1.5 text-blue-900 mb-1">
                 <ShieldCheck className="w-4 h-4 text-blue-700" />
